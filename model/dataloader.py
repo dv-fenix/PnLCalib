@@ -19,7 +19,7 @@ from utils.utils_keypointsWP import KeypointsWP
 
 class SoccerNetCalibrationDataset(Dataset):
 
-    def __init__(self, root_dir, split, transform, main_cam_only=True):
+    def __init__(self, root_dir, split, transform, main_cam_only=False):
 
         self.root_dir = root_dir
         self.split = split
@@ -259,6 +259,3 @@ class WorldPoseDataset(Dataset):
         dist, K, R, t = camera["k"][int(frame_num)], camera["K"][int(frame_num)], camera["R"][int(frame_num)], \
                          camera["t"][int(frame_num)]
         return K, R, t, dist
-
-
-

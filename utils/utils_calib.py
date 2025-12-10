@@ -1,46 +1,130 @@
-import sys
-import cv2
 import copy
 import itertools
-import numpy as np
-
+import sys
 from itertools import chain
+
+import cv2
+import numpy as np
 from scipy.optimize import least_squares
 
-from utils.utils_optimize import vector_to_mtx,  point_to_line_distance, get_opt_vector, line_plane_intersection, \
-                                    plane_from_P, plane_from_H
+from utils.utils_optimize import (get_opt_vector, line_plane_intersection,
+                                  plane_from_H, plane_from_P,
+                                  point_to_line_distance, vector_to_mtx)
 
+keypoint_world_coords_2D = [
+    [0.0, 0.0],
+    [52.5, 0.0],
+    [105.0, 0.0],
+    [0.0, 13.84],
+    [16.5, 13.84],
+    [88.5, 13.84],
+    [105.0, 13.84],
+    [0.0, 24.84],
+    [5.5, 24.84],
+    [99.5, 24.84],
+    [105.0, 24.84],
+    [0.0, 30.34],
+    [0.0, 30.34],
+    [105.0, 30.34],
+    [105.0, 30.34],
+    [0.0, 37.66],
+    [0.0, 37.66],
+    [105.0, 37.66],
+    [105.0, 37.66],
+    [0.0, 43.16],
+    [5.5, 43.16],
+    [99.5, 43.16],
+    [105.0, 43.16],
+    [0.0, 54.16],
+    [16.5, 54.16],
+    [88.5, 54.16],
+    [105.0, 54.16],
+    [0.0, 68.0],
+    [52.5, 68.0],
+    [105.0, 68.0],
+    [16.5, 26.68],
+    [52.5, 24.85],
+    [88.5, 26.68],
+    [16.5, 41.31],
+    [52.5, 43.15],
+    [88.5, 41.31],
+    [19.99, 32.29],
+    [43.68, 31.53],
+    [61.31, 31.53],
+    [85.0, 32.29],
+    [19.99, 35.7],
+    [43.68, 36.46],
+    [61.31, 36.46],
+    [85.0, 35.7],
+    [11.0, 34.0],
+    [16.5, 34.0],
+    [20.15, 34.0],
+    [46.03, 27.53],
+    [58.97, 27.53],
+    [43.35, 34.0],
+    [52.5, 34.0],
+    [61.5, 34.0],
+    [46.03, 40.47],
+    [58.97, 40.47],
+    [84.85, 34.0],
+    [88.5, 34.0],
+    [94.0, 34.0],
+]  # 57
 
-keypoint_world_coords_2D = [[0., 0.], [52.5, 0.], [105., 0.], [0., 13.84], [16.5, 13.84], [88.5, 13.84], [105., 13.84],
-                            [0., 24.84], [5.5, 24.84], [99.5, 24.84], [105., 24.84], [0., 30.34], [0., 30.34],
-                            [105., 30.34], [105., 30.34], [0., 37.66], [0., 37.66], [105., 37.66], [105., 37.66],
-                            [0., 43.16], [5.5, 43.16], [99.5, 43.16], [105., 43.16], [0., 54.16], [16.5, 54.16],
-                            [88.5, 54.16], [105., 54.16], [0., 68.], [52.5, 68.], [105., 68.], [16.5, 26.68],
-                            [52.5, 24.85], [88.5, 26.68], [16.5, 41.31], [52.5, 43.15], [88.5, 41.31], [19.99, 32.29],
-                            [43.68, 31.53], [61.31, 31.53], [85., 32.29], [19.99, 35.7], [43.68, 36.46], [61.31, 36.46],
-                            [85., 35.7], [11., 34.], [16.5, 34.], [20.15, 34.], [46.03, 27.53], [58.97, 27.53],
-                            [43.35, 34.], [52.5, 34.], [61.5, 34.], [46.03, 40.47], [58.97, 40.47], [84.85, 34.],
-                            [88.5, 34.], [94., 34.]]  # 57
+keypoint_aux_world_coords_2D = [
+    [5.5, 0],
+    [16.5, 0],
+    [88.5, 0],
+    [99.5, 0],
+    [5.5, 13.84],
+    [99.5, 13.84],
+    [16.5, 24.84],
+    [88.5, 24.84],
+    [16.5, 43.16],
+    [88.5, 43.16],
+    [5.5, 54.16],
+    [99.5, 54.16],
+    [5.5, 68],
+    [16.5, 68],
+    [88.5, 68],
+    [99.5, 68],
+]
 
-keypoint_aux_world_coords_2D = [[5.5, 0], [16.5, 0], [88.5, 0], [99.5, 0], [5.5, 13.84], [99.5, 13.84], [16.5, 24.84],
-                                [88.5, 24.84], [16.5, 43.16], [88.5, 43.16], [5.5, 54.16], [99.5, 54.16], [5.5, 68],
-                                [16.5, 68], [88.5, 68], [99.5, 68]]
-
-line_world_coords_3D = [[[0., 54.16, 0.], [16.5, 54.16, 0.]], [[16.5, 13.84, 0.], [16.5, 54.16, 0.]],
-                [[16.5, 13.84, 0.], [0., 13.84, 0.]], [[88.5, 54.16, 0.], [105., 54.16, 0.]],
-                [[88.5, 13.84, 0.], [88.5, 54.16, 0.]], [[88.5, 13.84, 0.], [105., 13.84, 0.]],
-                [[0., 37.66, -2.44], [0., 30.34, -2.44]], [[0., 37.66, 0.], [0., 37.66, -2.44]],
-                [[0., 30.34, 0.], [0., 30.34, -2.44]], [[105., 37.66, -2.44], [105., 30.34, -2.44]],
-                [[105., 30.34, 0.], [105., 30.34, -2.44]], [[105., 37.66, 0.], [105., 37.66, -2.44]],
-                [[52.5, 0., 0.], [52.5, 68, 0.]], [[0., 68., 0.], [105., 68., 0.]], [[0., 0., 0.], [0., 68., 0.]],
-                [[105., 0., 0.], [105., 68., 0.]], [[0., 0., 0.], [105., 0., 0.]], [[0., 43.16, 0.], [5.5, 43.16, 0.]],
-                [[5.5, 43.16, 0.], [5.5, 24.84, 0.]], [[5.5, 24.84, 0.], [0., 24.84, 0.]],
-                [[99.5, 43.16, 0.], [105., 43.16, 0.]], [[99.5, 43.16, 0.], [99.5, 24.84, 0.]],
-                [[99.5, 24.84, 0.], [105., 24.84, 0.]]]
+line_world_coords_3D = [
+    [[0.0, 54.16, 0.0], [16.5, 54.16, 0.0]],
+    [[16.5, 13.84, 0.0], [16.5, 54.16, 0.0]],
+    [[16.5, 13.84, 0.0], [0.0, 13.84, 0.0]],
+    [[88.5, 54.16, 0.0], [105.0, 54.16, 0.0]],
+    [[88.5, 13.84, 0.0], [88.5, 54.16, 0.0]],
+    [[88.5, 13.84, 0.0], [105.0, 13.84, 0.0]],
+    [[0.0, 37.66, -2.44], [0.0, 30.34, -2.44]],
+    [[0.0, 37.66, 0.0], [0.0, 37.66, -2.44]],
+    [[0.0, 30.34, 0.0], [0.0, 30.34, -2.44]],
+    [[105.0, 37.66, -2.44], [105.0, 30.34, -2.44]],
+    [[105.0, 30.34, 0.0], [105.0, 30.34, -2.44]],
+    [[105.0, 37.66, 0.0], [105.0, 37.66, -2.44]],
+    [[52.5, 0.0, 0.0], [52.5, 68, 0.0]],
+    [[0.0, 68.0, 0.0], [105.0, 68.0, 0.0]],
+    [[0.0, 0.0, 0.0], [0.0, 68.0, 0.0]],
+    [[105.0, 0.0, 0.0], [105.0, 68.0, 0.0]],
+    [[0.0, 0.0, 0.0], [105.0, 0.0, 0.0]],
+    [[0.0, 43.16, 0.0], [5.5, 43.16, 0.0]],
+    [[5.5, 43.16, 0.0], [5.5, 24.84, 0.0]],
+    [[5.5, 24.84, 0.0], [0.0, 24.84, 0.0]],
+    [[99.5, 43.16, 0.0], [105.0, 43.16, 0.0]],
+    [[99.5, 43.16, 0.0], [99.5, 24.84, 0.0]],
+    [[99.5, 24.84, 0.0], [105.0, 24.84, 0.0]],
+]
 
 keypoint_world_coords_2D = [[x - 52.5, y - 34] for x, y in keypoint_world_coords_2D]
-keypoint_aux_world_coords_2D = [[x - 52.5, y - 34] for x, y in keypoint_aux_world_coords_2D]
-line_world_coords_3D = [[[x1 - 52.5, y1 - 34, z1], [x2 - 52.5, y2 - 34, z2]] for [[x1, y1, z1], [x2,y2,z2]] in line_world_coords_3D]
+keypoint_aux_world_coords_2D = [
+    [x - 52.5, y - 34] for x, y in keypoint_aux_world_coords_2D
+]
+line_world_coords_3D = [
+    [[x1 - 52.5, y1 - 34, z1], [x2 - 52.5, y2 - 34, z2]]
+    for [[x1, y1, z1], [x2, y2, z2]] in line_world_coords_3D
+]
+
 
 def rotation_matrix_to_pan_tilt_roll(rotation):
     """
@@ -51,15 +135,23 @@ def rotation_matrix_to_pan_tilt_roll(rotation):
     """
     orientation = np.transpose(rotation)
     first_tilt = np.arccos(orientation[2, 2])
-    second_tilt = - first_tilt
+    second_tilt = -first_tilt
 
-    sign_first_tilt = 1. if np.sin(first_tilt) > 0. else -1.
-    sign_second_tilt = 1. if np.sin(second_tilt) > 0. else -1.
+    sign_first_tilt = 1.0 if np.sin(first_tilt) > 0.0 else -1.0
+    sign_second_tilt = 1.0 if np.sin(second_tilt) > 0.0 else -1.0
 
-    first_pan = np.arctan2(sign_first_tilt * orientation[0, 2], sign_first_tilt * - orientation[1, 2])
-    second_pan = np.arctan2(sign_second_tilt * orientation[0, 2], sign_second_tilt * - orientation[1, 2])
-    first_roll = np.arctan2(sign_first_tilt * orientation[2, 0], sign_first_tilt * orientation[2, 1])
-    second_roll = np.arctan2(sign_second_tilt * orientation[2, 0], sign_second_tilt * orientation[2, 1])
+    first_pan = np.arctan2(
+        sign_first_tilt * orientation[0, 2], sign_first_tilt * -orientation[1, 2]
+    )
+    second_pan = np.arctan2(
+        sign_second_tilt * orientation[0, 2], sign_second_tilt * -orientation[1, 2]
+    )
+    first_roll = np.arctan2(
+        sign_first_tilt * orientation[2, 0], sign_first_tilt * orientation[2, 1]
+    )
+    second_roll = np.arctan2(
+        sign_second_tilt * orientation[2, 0], sign_second_tilt * orientation[2, 1]
+    )
 
     # print(f"first solution {first_pan*180./np.pi}, {first_tilt*180./np.pi}, {first_roll*180./np.pi}")
     # print(f"second solution {second_pan*180./np.pi}, {second_tilt*180./np.pi}, {second_roll*180./np.pi}")
@@ -76,32 +168,50 @@ def pan_tilt_roll_to_orientation(pan, tilt, roll):
     :param roll:
     :return: orientation matrix
     """
-    Rpan = np.array([
-        [np.cos(pan), -np.sin(pan), 0],
-        [np.sin(pan), np.cos(pan), 0],
-        [0, 0, 1]])
-    Rroll = np.array([
-        [np.cos(roll), -np.sin(roll), 0],
-        [np.sin(roll), np.cos(roll), 0],
-        [0, 0, 1]])
-    Rtilt = np.array([
-        [1, 0, 0],
-        [0, np.cos(tilt), -np.sin(tilt)],
-        [0, np.sin(tilt), np.cos(tilt)]])
+    Rpan = np.array(
+        [[np.cos(pan), -np.sin(pan), 0], [np.sin(pan), np.cos(pan), 0], [0, 0, 1]]
+    )
+    Rroll = np.array(
+        [[np.cos(roll), -np.sin(roll), 0], [np.sin(roll), np.cos(roll), 0], [0, 0, 1]]
+    )
+    Rtilt = np.array(
+        [[1, 0, 0], [0, np.cos(tilt), -np.sin(tilt)], [0, np.sin(tilt), np.cos(tilt)]]
+    )
     rotMat = np.dot(Rpan, np.dot(Rtilt, Rroll))
     return rotMat
 
 
 class FramebyFrameCalib:
-    def __init__(self, iwidth=960, iheight=540, denormalize=False):
+    def __init__(
+        self,
+        iwidth=960,
+        iheight=540,
+        denormalize=False,
+        weight_mode="superlinear",
+        weight_gamma=1.0,
+        weight_smin=0.1,
+    ):
+        """
+        weight_mode:
+            "identity"   -> w = score
+            "linear"     -> w = clamp((score - smin)/(1-smin), 0, 1)
+            "superlinear"-> same as linear, then w^gamma
+            "hard"       -> w = 1 if score >= smin else 0
+            "uniform"    -> w = 1 for all points/lines
+        """
         self.image_width = iwidth
         self.image_height = iheight
         self.denormalize = denormalize
         self.calibration = None
-        self.principal_point = np.array([iwidth/2, iheight/2])
+        self.principal_point = np.array([iwidth / 2, iheight / 2])
         self.position = None
         self.rotation = None
         self.homography = None
+        self.weights_pts = None  # for weighted point-only / joint LM
+
+        self.weight_mode = weight_mode
+        self.weight_gamma = weight_gamma
+        self.weight_smin = weight_smin
 
     def update(self, kp_dict, lines_dict):
         self.keypoints_dict = kp_dict
@@ -114,36 +224,62 @@ class FramebyFrameCalib:
 
     def denormalize_keypoints(self):
         for kp in self.keypoints_dict.keys():
-            self.keypoints_dict[kp]['x'] *= self.image_width
-            self.keypoints_dict[kp]['y'] *= self.image_height
+            self.keypoints_dict[kp]["x"] *= self.image_width
+            self.keypoints_dict[kp]["y"] *= self.image_height
         for line in self.lines_dict.keys():
-            self.lines_dict[line]['x_1'] *= self.image_width
-            self.lines_dict[line]['y_1'] *= self.image_height
-            self.lines_dict[line]['x_2'] *= self.image_width
-            self.lines_dict[line]['y_2'] *= self.image_height
+            self.lines_dict[line]["x_1"] *= self.image_width
+            self.lines_dict[line]["y_1"] *= self.image_height
+            self.lines_dict[line]["x_2"] *= self.image_width
+            self.lines_dict[line]["y_2"] *= self.image_height
 
     def get_keypoints_subsets(self):
         full, main, ground_plane = {}, {}, {}
 
         for kp in self.keypoints_dict.keys():
-            wp = keypoint_world_coords_2D[kp - 1] if kp <= 57 else keypoint_aux_world_coords_2D[kp - 1 - 57]
+            wp = (
+                keypoint_world_coords_2D[kp - 1]
+                if kp <= 57
+                else keypoint_aux_world_coords_2D[kp - 1 - 57]
+            )
+            # use 'p' from kp_dict as score
+            score = self.keypoints_dict[kp].get("p", 1.0)
 
-            full[kp] = {'xi': self.keypoints_dict[kp]['x'], 'yi': self.keypoints_dict[kp]['y'],
-                        'xw': wp[0], 'yw': wp[1], 'zw': -2.44 if kp in [12, 15, 16, 19] else 0.}
+            full[kp] = {
+                "xi": self.keypoints_dict[kp]["x"],
+                "yi": self.keypoints_dict[kp]["y"],
+                "xw": wp[0],
+                "yw": wp[1],
+                "zw": -2.44 if kp in [12, 15, 16, 19] else 0.0,
+                "score": score,
+            }
             if kp <= 30:
-                main[kp] = {'xi': self.keypoints_dict[kp]['x'], 'yi': self.keypoints_dict[kp]['y'],
-                                      'xw': wp[0], 'yw': wp[1], 'zw': -2.44 if kp in [12, 15, 16, 19] else 0.}
+                main[kp] = {
+                    "xi": self.keypoints_dict[kp]["x"],
+                    "yi": self.keypoints_dict[kp]["y"],
+                    "xw": wp[0],
+                    "yw": wp[1],
+                    "zw": -2.44 if kp in [12, 15, 16, 19] else 0.0,
+                    "score": score,
+                }
             if kp not in [12, 15, 16, 19]:
-                ground_plane[kp] = {'xi': self.keypoints_dict[kp]['x'], 'yi': self.keypoints_dict[kp]['y'],
-                                      'xw': wp[0], 'yw': wp[1], 'zw': -2.44 if kp in [12, 15, 16, 19] else 0.}
+                ground_plane[kp] = {
+                    "xi": self.keypoints_dict[kp]["x"],
+                    "yi": self.keypoints_dict[kp]["y"],
+                    "xw": wp[0],
+                    "yw": wp[1],
+                    "zw": -2.44 if kp in [12, 15, 16, 19] else 0.0,
+                    "score": score,
+                }
 
-        return {'full': full, 'main': main, 'ground_plane': ground_plane}
+        return {"full": full, "main": main, "ground_plane": ground_plane}
 
     def get_per_plane_correspondences(self, mode, use_ransac):
         self.obj_pts, self.img_pts, self.ord_pts = None, None, None
 
-        if mode not in ['full', 'main', 'ground_plane']:
-            sys.exit("Wrong mode. Select mode between 'full', 'main_keypoints', 'ground_plane'")
+        if mode not in ["full", "main", "ground_plane"]:
+            sys.exit(
+                "Wrong mode. Select mode between 'full', 'main_keypoints', 'ground_plane'"
+            )
 
         world_points_p1, world_points_p2, world_points_p3 = [], [], []
         img_points_p1, img_points_p2, img_points_p3 = [], [], []
@@ -153,35 +289,41 @@ class FramebyFrameCalib:
         for kp in keypoints.keys():
             if kp in [12, 16]:
                 keys_p2.append(kp)
-                world_points_p2.append([-keypoints[kp]['zw'], keypoints[kp]['yw'], 0.])
-                img_points_p2.append([keypoints[kp]['xi'], keypoints[kp]['yi']])
+                world_points_p2.append([-keypoints[kp]["zw"], keypoints[kp]["yw"], 0.0])
+                img_points_p2.append([keypoints[kp]["xi"], keypoints[kp]["yi"]])
 
             elif kp in [1, 4, 8, 13, 17, 20, 24, 28]:
                 keys_p1.append(kp)
                 keys_p2.append(kp)
-                world_points_p1.append([keypoints[kp]['xw'], keypoints[kp]['yw'], keypoints[kp]['zw']])
-                world_points_p2.append([-keypoints[kp]['zw'], keypoints[kp]['yw'], 0.])
-                img_points_p1.append([keypoints[kp]['xi'], keypoints[kp]['yi']])
-                img_points_p2.append([keypoints[kp]['xi'], keypoints[kp]['yi']])
+                world_points_p1.append(
+                    [keypoints[kp]["xw"], keypoints[kp]["yw"], keypoints[kp]["zw"]]
+                )
+                world_points_p2.append([-keypoints[kp]["zw"], keypoints[kp]["yw"], 0.0])
+                img_points_p1.append([keypoints[kp]["xi"], keypoints[kp]["yi"]])
+                img_points_p2.append([keypoints[kp]["xi"], keypoints[kp]["yi"]])
             elif kp in [3, 7, 11, 14, 18, 23, 27, 30]:
                 keys_p1.append(kp)
                 keys_p3.append(kp)
-                world_points_p1.append([keypoints[kp]['xw'], keypoints[kp]['yw'], keypoints[kp]['zw']])
-                world_points_p3.append([-keypoints[kp]['zw'], keypoints[kp]['yw'], 0.])
-                img_points_p1.append([keypoints[kp]['xi'], keypoints[kp]['yi']])
-                img_points_p3.append([keypoints[kp]['xi'], keypoints[kp]['yi']])
+                world_points_p1.append(
+                    [keypoints[kp]["xw"], keypoints[kp]["yw"], keypoints[kp]["zw"]]
+                )
+                world_points_p3.append([-keypoints[kp]["zw"], keypoints[kp]["yw"], 0.0])
+                img_points_p1.append([keypoints[kp]["xi"], keypoints[kp]["yi"]])
+                img_points_p3.append([keypoints[kp]["xi"], keypoints[kp]["yi"]])
             elif kp in [15, 19]:
                 keys_p3.append(kp)
-                world_points_p3.append([-keypoints[kp]['zw'], keypoints[kp]['yw'], 0.])
-                img_points_p3.append([keypoints[kp]['xi'], keypoints[kp]['yi']])
+                world_points_p3.append([-keypoints[kp]["zw"], keypoints[kp]["yw"], 0.0])
+                img_points_p3.append([keypoints[kp]["xi"], keypoints[kp]["yi"]])
             else:
                 keys_p1.append(kp)
-                world_points_p1.append([keypoints[kp]['xw'], keypoints[kp]['yw'], keypoints[kp]['zw']])
-                img_points_p1.append([keypoints[kp]['xi'], keypoints[kp]['yi']])
+                world_points_p1.append(
+                    [keypoints[kp]["xw"], keypoints[kp]["yw"], keypoints[kp]["zw"]]
+                )
+                img_points_p1.append([keypoints[kp]["xi"], keypoints[kp]["yi"]])
 
         obj_points, img_points, key_points, ord_points = [], [], [], []
 
-        if mode == 'ground_plane':
+        if mode == "ground_plane":
             obj_list = [world_points_p1]
             img_list = [img_points_p1]
             key_list = [keys_p1]
@@ -190,19 +332,42 @@ class FramebyFrameCalib:
             img_list = [img_points_p1, img_points_p2, img_points_p3]
             key_list = [keys_p1, keys_p2, keys_p3]
 
-        if use_ransac > 0.:
+        if use_ransac > 0.0:
             for i in range(len(obj_list)):
-                if len(obj_list[i]) >= 4 and not all(item[0] == obj_list[i][0][0] for item in obj_list[i]) \
-                        and not all(item[1] == obj_list[i][0][1] for item in obj_list[i]):
+                if (
+                    len(obj_list[i]) >= 4
+                    and not all(item[0] == obj_list[i][0][0] for item in obj_list[i])
+                    and not all(item[1] == obj_list[i][0][1] for item in obj_list[i])
+                ):
                     if i == 0:
-                        h, status = cv2.findHomography(np.array(obj_list[i]), np.array(img_list[i]), cv2.RANSAC, use_ransac)
-                        obj_list[i] = [obj for count, obj in enumerate(obj_list[i]) if status[count]==1]
-                        img_list[i] = [obj for count, obj in enumerate(img_list[i]) if status[count]==1]
-                        key_list[i] = [obj for count, obj in enumerate(key_list[i]) if status[count]==1]
+                        h, status = cv2.findHomography(
+                            np.array(obj_list[i]),
+                            np.array(img_list[i]),
+                            cv2.RANSAC,
+                            use_ransac,
+                        )
+                        obj_list[i] = [
+                            obj
+                            for count, obj in enumerate(obj_list[i])
+                            if status[count] == 1
+                        ]
+                        img_list[i] = [
+                            obj
+                            for count, obj in enumerate(img_list[i])
+                            if status[count] == 1
+                        ]
+                        key_list[i] = [
+                            obj
+                            for count, obj in enumerate(key_list[i])
+                            if status[count] == 1
+                        ]
 
         for i in range(len(obj_list)):
-            if len(obj_list[i]) >= 4 and not all(item[0] == obj_list[i][0][0] for item in obj_list[i])\
-                    and not all(item[1] == obj_list[i][0][1] for item in obj_list[i]):
+            if (
+                len(obj_list[i]) >= 4
+                and not all(item[0] == obj_list[i][0][0] for item in obj_list[i])
+                and not all(item[1] == obj_list[i][0][1] for item in obj_list[i])
+            ):
                 obj_points.append(np.array(obj_list[i], dtype=np.float32))
                 img_points.append(np.array(img_list[i], dtype=np.float32))
                 key_points.append(key_list[i])
@@ -214,21 +379,28 @@ class FramebyFrameCalib:
         self.ord_pts = ord_points
 
     def get_correspondences(self, mode):
-        obj_pts, img_pts, prob_pts = [], [], []
+        obj_pts, img_pts, weights = [], [], []
         keypoints = list(set(list(itertools.chain(*self.key_pts))))
         for kp in keypoints:
-            obj_pts.append([self.subsets[mode][kp]['xw'], self.subsets[mode][kp]['yw'], self.subsets[mode][kp]['zw']])
-            img_pts.append([self.subsets[mode][kp]['xi'], self.subsets[mode][kp]['yi']])
+            entry = self.subsets[mode][kp]
+            obj_pts.append([entry["xw"], entry["yw"], entry["zw"]])
+            img_pts.append([entry["xi"], entry["yi"]])
+            # use stored 'score' which came from kp_dict['p']
+            weights.append(entry.get("score", 1.0))
 
-        return np.array(obj_pts, dtype=np.float32), np.array(img_pts, dtype=np.float32)
+        return (
+            np.array(obj_pts, dtype=np.float32),
+            np.array(img_pts, dtype=np.float32),
+            np.array(weights, dtype=np.float32),
+        )
 
     def change_plane_coords(self, w=105, h=68):
-        R = np.array([[0,0,-1], [0,1,0], [1,0,0]])
+        R = np.array([[0, 0, -1], [0, 1, 0], [1, 0, 0]])
         self.rotation = self.rotation @ R
         if self.ord_pts[0] == 1:
-            self.position = np.linalg.inv(R) @ self.position + np.array([-w/2, 0, 0])
+            self.position = np.linalg.inv(R) @ self.position + np.array([-w / 2, 0, 0])
         elif self.ord_pts[0] == 2:
-            self.position = np.linalg.inv(R) @ self.position + np.array([w/2, 0, 0])
+            self.position = np.linalg.inv(R) @ self.position + np.array([w / 2, 0, 0])
 
     def reproj_err(self, obj_pts, img_pts):
         if self.calibration is not None:
@@ -241,20 +413,26 @@ class FramebyFrameCalib:
 
             It = np.eye(4)[:-1]
             It[:, -1] = -position_meters
-            Q = np.array([[x_focal_length, 0, x_principal_point],
-                          [0, y_focal_length, y_principal_point],
-                          [0, 0, 1]])
+            Q = np.array(
+                [
+                    [x_focal_length, 0, x_principal_point],
+                    [0, y_focal_length, y_principal_point],
+                    [0, 0, 1],
+                ]
+            )
             P = Q @ (rotation @ It)
 
             err, n = 0, 0
             for i in range(len(obj_pts)):
-                proj_point = P @ np.array([obj_pts[i][0], obj_pts[i][1], obj_pts[i][2], 1.])
+                proj_point = P @ np.array(
+                    [obj_pts[i][0], obj_pts[i][1], obj_pts[i][2], 1.0]
+                )
                 proj_point /= proj_point[-1]
-                err_point = (img_pts[i] - proj_point[:2])
+                err_point = img_pts[i] - proj_point[:2]
                 err += np.sum(err_point**2)
                 n += 1
 
-            return np.sqrt(err/n)
+            return np.sqrt(err / n)
         else:
             return None
 
@@ -262,13 +440,15 @@ class FramebyFrameCalib:
         if self.homography is not None:
             err, n = 0, 0
             for i in range(len(obj_pts)):
-                proj_point = self.homography @ np.array([obj_pts[i][0], obj_pts[i][1], 1.])
+                proj_point = self.homography @ np.array(
+                    [obj_pts[i][0], obj_pts[i][1], 1.0]
+                )
                 proj_point /= proj_point[-1]
-                err_point = (img_pts[i] - proj_point[:2])
+                err_point = img_pts[i] - proj_point[:2]
                 err += np.sum(err_point**2)
                 n += 1
 
-            return np.sqrt(err/n)
+            return np.sqrt(err / n)
         else:
             return None
 
@@ -292,17 +472,17 @@ class FramebyFrameCalib:
         self.lines_dict_cons = {}
         if plane_normal is not None:
             for key, value in self.lines_dict.items():
-                y1, y2 = value['y_1'], value['y_2']
-                x1, x2 = value['x_1'], value['x_2']
+                y1, y2 = value["y_1"], value["y_2"]
+                x1, x2 = value["x_1"], value["x_2"]
 
                 wp1, wp2 = line_world_coords_3D[key - 1]
                 p = line_plane_intersection(wp1, wp2, plane_normal, plane_point)
                 if len(p) == 2:
-                    proj1 = P @ np.array([p[0][0], p[0][1], p[0][2], 1.])
-                    proj2 = P @ np.array([p[1][0], p[1][1], p[1][2], 1.])
+                    proj1 = P @ np.array([p[0][0], p[0][1], p[0][2], 1.0])
+                    proj2 = P @ np.array([p[1][0], p[1][1], p[1][2], 1.0])
                 else:
-                    proj1 = P @ np.array([wp1[0], wp1[1], wp1[2], 1.])
-                    proj2 = P @ np.array([wp2[0], wp2[1], wp2[2], 1.])
+                    proj1 = P @ np.array([wp1[0], wp1[1], wp1[2], 1.0])
+                    proj2 = P @ np.array([wp2[0], wp2[1], wp2[2], 1.0])
 
                 proj1 /= proj1[-1]
                 proj2 /= proj2[-1]
@@ -312,67 +492,156 @@ class FramebyFrameCalib:
                 if distance2 <= threshold and distance1 <= threshold:
                     self.lines_dict_cons[key] = value
 
+    def score_to_weight(self, scores):
+        scores = np.asarray(scores, dtype=np.float64)
+
+        if self.weight_mode == "uniform":
+            return np.ones_like(scores)
+
+        if self.weight_mode == "hard":
+            return np.where(scores >= self.weight_smin, 1.0, 0.0)
+
+        if self.weight_mode == "identity":
+            return np.clip(scores, 0.0, None)
+
+        smin = self.weight_smin
+        denom = max(1e-6, 1.0 - smin)
+        w = (scores - smin) / denom
+        w = np.clip(w, 0.0, 1.0)
+
+        if self.weight_mode == "linear":
+            return w
+
+        if self.weight_mode == "superlinear":
+            return np.power(w, self.weight_gamma)
+
+        return w
+
+    def point_optimizer(self, vector, img_pts, obj_pts, weights):
+        P = vector_to_mtx(vector, self.calibration)
+        if not any(np.isnan(P.flatten())):
+            points, proj_points = [], []
+            for i in range(len(img_pts)):
+                points.append(img_pts[i])
+                proj_point = P @ np.array(
+                    [obj_pts[i][0], obj_pts[i][1], obj_pts[i][2], 1.0]
+                )
+                proj_point /= proj_point[-1]
+                proj_points.append(proj_point[:2])
+
+            residuals = np.array(points) - np.array(proj_points)  # (N, 2)
+
+            if weights is not None:
+                w = np.asarray(weights).astype(np.float64)
+                w = np.clip(w, 0.0, None)
+                sqrt_w = np.sqrt(w).reshape(-1, 1)
+                residuals = sqrt_w * residuals
+
+            return residuals.ravel()
+        else:
+            return np.full(2 * len(img_pts), np.inf)
+
     def line_optimizer(self, vector, img_pts, obj_pts):
         P = vector_to_mtx(vector, self.calibration)
         if not any(np.isnan(P.flatten())):
 
-            plane_normal, plane_point = plane_from_P(P, self.position, self.principal_point)
+            plane_normal, plane_point = plane_from_P(
+                P, self.position, self.principal_point
+            )
 
+            # point residuals
             points, proj_points = [], []
             for i in range(len(img_pts)):
                 points.append(img_pts[i])
-                proj_point = P @ np.array([obj_pts[i][0], obj_pts[i][1], obj_pts[i][2], 1.])
-                scale = proj_point[-1]
-                proj_point /= scale
+                proj_point = P @ np.array(
+                    [obj_pts[i][0], obj_pts[i][1], obj_pts[i][2], 1.0]
+                )
+                proj_point /= proj_point[-1]
                 proj_points.append(proj_point[:2])
 
-            err1 = (np.array(points) - np.array(proj_points)).ravel()
+            residuals_pts = np.array(points) - np.array(proj_points)  # (N_pts, 2)
+            if self.weights_pts is not None:
+                w_pts = np.asarray(self.weights_pts).astype(np.float64)
+                w_pts = np.clip(w_pts, 0.0, None)
+                sqrt_w_pts = np.sqrt(w_pts).reshape(-1, 1)
+                residuals_pts = sqrt_w_pts * residuals_pts
+            err1 = residuals_pts.ravel()
 
-            err2 = []
+            # line residuals
+            err2_list = []
+            line_scores = []
             for key, value in self.lines_dict_cons.items():
-                y1, y2 = value['y_1'], value['y_2']
-                x1, x2 = value['x_1'], value['x_2']
+                y1, y2 = value["y_1"], value["y_2"]
+                x1, x2 = value["x_1"], value["x_2"]
 
                 wp1, wp2 = line_world_coords_3D[key - 1]
                 p = line_plane_intersection(wp1, wp2, plane_normal, plane_point)
 
                 if len(p) == 2:
-                    proj1 = P @ np.array([p[0][0], p[0][1], p[0][2], 1.])
-                    proj2 = P @ np.array([p[1][0], p[1][1], p[1][2], 1.])
+                    proj1 = P @ np.array([p[0][0], p[0][1], p[0][2], 1.0])
+                    proj2 = P @ np.array([p[1][0], p[1][1], p[1][2], 1.0])
                 else:
-                    proj1 = P @ np.array([wp1[0], wp1[1], wp1[2], 1.])
-                    proj2 = P @ np.array([wp2[0], wp2[1], wp2[2], 1.])
+                    proj1 = P @ np.array([wp1[0], wp1[1], wp1[2], 1.0])
+                    proj2 = P @ np.array([wp2[0], wp2[1], wp2[2], 1.0])
 
                 proj1 /= proj1[-1]
                 proj2 /= proj2[-1]
                 distance1 = point_to_line_distance(proj1, proj2, np.array([x1, y1]))
                 distance2 = point_to_line_distance(proj1, proj2, np.array([x2, y2]))
-                err2.append([distance1, distance2])
+                err2_list.append([distance1, distance2])
 
-            return np.concatenate((err1, np.array(err2).ravel()))
+                # use 'p_1' / 'p_2' from lines_dict as line endpoint scores
+                s1 = value.get("p_1", value.get("p", 1.0))
+                s2 = value.get("p_2", value.get("p", 1.0))
+                line_scores.append(min(s1, s2))
+
+            if err2_list:
+                err2_arr = np.array(err2_list, dtype=np.float64)
+                weights_lines = self.score_to_weight(
+                    np.array(line_scores, dtype=np.float64)
+                )
+                weights_lines = np.clip(weights_lines, 0.0, None)
+                sqrt_wl = np.sqrt(weights_lines).reshape(-1, 1)
+                err2_arr = sqrt_wl * err2_arr
+                err2 = err2_arr.ravel()
+            else:
+                err2 = np.array([], dtype=np.float64)
+
+            return np.concatenate((err1, err2))
 
         else:
             err = []
-            for i in range(len(img_pts)+len( self.lines_dict_cons)):
+            for i in range(len(img_pts) + len(self.lines_dict_cons)):
                 err.append([np.inf, np.inf])
             return np.array(err).ravel()
 
-
-    def get_cam_params(self, mode='full', use_ransac=0, refine=False, refine_w_lines=False):
+    def get_cam_params(
+        self, mode="full", use_ransac=0, refine=False, refine_w_lines=False
+    ):
         flags = cv2.CALIB_FIX_PRINCIPAL_POINT | cv2.CALIB_FIX_ASPECT_RATIO
-        flags = flags | cv2.CALIB_FIX_TANGENT_DIST | \
-                cv2.CALIB_FIX_S1_S2_S3_S4 | cv2.CALIB_FIX_TAUX_TAUY
-        flags = flags | cv2.CALIB_FIX_K1 | cv2.CALIB_FIX_K2 | \
-                cv2.CALIB_FIX_K3 | cv2.CALIB_FIX_K4 | cv2.CALIB_FIX_K5 | \
-                cv2.CALIB_FIX_K6
+        flags = (
+            flags
+            | cv2.CALIB_FIX_TANGENT_DIST
+            | cv2.CALIB_FIX_S1_S2_S3_S4
+            | cv2.CALIB_FIX_TAUX_TAUY
+        )
+        flags = (
+            flags
+            | cv2.CALIB_FIX_K1
+            | cv2.CALIB_FIX_K2
+            | cv2.CALIB_FIX_K3
+            | cv2.CALIB_FIX_K4
+            | cv2.CALIB_FIX_K5
+            | cv2.CALIB_FIX_K6
+        )
 
         self.get_per_plane_correspondences(mode=mode, use_ransac=use_ransac)
 
         if len(self.obj_pts) == 0:
             return None, None
 
-
-        obj_pts, img_pts = self.get_correspondences(mode)
+        # First call: only need points for calibrateCamera, ignore weights
+        obj_pts, img_pts, _ = self.get_correspondences(mode)
         if len(obj_pts) < 6:
             ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
                 self.obj_pts,
@@ -414,35 +683,46 @@ class FramebyFrameCalib:
             if self.ord_pts[0] != 0:
                 self.change_plane_coords()
 
-            obj_pts, img_pts = self.get_correspondences(mode)
+            # Second call: now we store point weights for LM refinement
+            obj_pts, img_pts, raw_weights = self.get_correspondences(mode)
+            self.weights_pts = self.score_to_weight(raw_weights)
             rep_err = self.reproj_err(obj_pts, img_pts)
 
             if refine:
                 if not np.isnan(rep_err):
-                    rvec, _ = cv2.Rodrigues(self.rotation)
-                    tvec = -self.rotation @ self.position
-
-                    rvecs, tvecs = cv2.solvePnPRefineLM(obj_pts, img_pts, self.calibration, dist, rvec, tvec,
-                                                  (cv2.TERM_CRITERIA_MAX_ITER + cv2.TERM_CRITERIA_EPS,
-                                                   20000, 1e-5))
-
-                    self.rotation, _ = cv2.Rodrigues(rvecs)
-                    self.position = - np.transpose(self.rotation) @ tvecs
-                    rep_err = self.reproj_err(obj_pts, img_pts)
-
+                    vector = get_opt_vector(self.position, self.rotation)
+                    res = least_squares(
+                        self.point_optimizer,
+                        vector,
+                        verbose=0,
+                        ftol=1e-4,
+                        x_scale="jac",
+                        method="trf",
+                        args=(img_pts, obj_pts, self.weights_pts),
+                    )
+                    vector_opt = res["x"]
+                    if not any(np.isnan(vector_opt)):
+                        self.vector_to_params(vector_opt)
+                        rep_err = self.reproj_err(obj_pts, img_pts)
 
             if refine_w_lines:
                 if not np.isnan(rep_err):
                     self.lines_consensus()
                     vector = get_opt_vector(self.position, self.rotation)
-                    res = least_squares(self.line_optimizer, vector, verbose=0, ftol=1e-4, x_scale="jac", method='trf',
-                                         args=(img_pts, obj_pts))
+                    res = least_squares(
+                        self.line_optimizer,
+                        vector,
+                        verbose=0,
+                        ftol=1e-4,
+                        x_scale="jac",
+                        method="trf",
+                        args=(img_pts, obj_pts),
+                    )
 
-                    vector_opt = res['x']
+                    vector_opt = res["x"]
                     if not any(np.isnan(vector_opt)):
                         self.vector_to_params(vector_opt)
                         rep_err = self.reproj_err(obj_pts, img_pts)
-
 
             pan, tilt, roll = rotation_matrix_to_pan_tilt_roll(self.rotation)
 
@@ -450,24 +730,31 @@ class FramebyFrameCalib:
             tilt = np.rad2deg(tilt)
             roll = np.rad2deg(roll)
 
-            cam_params = {"pan_degrees": pan,
-                          "tilt_degrees": tilt,
-                          "roll_degrees": roll,
-                          "x_focal_length": self.calibration[0,0],
-                          "y_focal_length": self.calibration[1,1],
-                          "principal_point": [self.principal_point[0], self.principal_point[1]],
-                          "position_meters": [self.position[0], self.position[1], self.position[2]],
-                          "rotation_matrix": [[self.rotation[0, 0], self.rotation[0, 1], self.rotation[0, 2]],
-                                              [self.rotation[1, 0], self.rotation[1, 1], self.rotation[1, 2]],
-                                              [self.rotation[2, 0], self.rotation[2, 1], self.rotation[2, 2]]],
-                          "radial_distortion": [0., 0., 0., 0., 0., 0.],
-                          "tangential_distortion": [0., 0.],
-                          "thin_prism_distortion": [0., 0., 0., 0.]}
+            cam_params = {
+                "pan_degrees": pan,
+                "tilt_degrees": tilt,
+                "roll_degrees": roll,
+                "x_focal_length": self.calibration[0, 0],
+                "y_focal_length": self.calibration[1, 1],
+                "principal_point": [self.principal_point[0], self.principal_point[1]],
+                "position_meters": [
+                    self.position[0],
+                    self.position[1],
+                    self.position[2],
+                ],
+                "rotation_matrix": [
+                    [self.rotation[0, 0], self.rotation[0, 1], self.rotation[0, 2]],
+                    [self.rotation[1, 0], self.rotation[1, 1], self.rotation[1, 2]],
+                    [self.rotation[2, 0], self.rotation[2, 1], self.rotation[2, 2]],
+                ],
+                "radial_distortion": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                "tangential_distortion": [0.0, 0.0],
+                "thin_prism_distortion": [0.0, 0.0, 0.0, 0.0],
+            }
 
             return cam_params, rep_err
         else:
             return None, None
-
 
     def estimate_calibration_matrix_from_plane_homography(self, homography):
         """
@@ -479,9 +766,9 @@ class FramebyFrameCalib:
         """
         H = np.reshape(homography, (9,))
         A = np.zeros((5, 6))
-        A[0, 1] = 1.
-        A[1, 0] = 1.
-        A[1, 2] = -1.
+        A[0, 1] = 1.0
+        A[1, 0] = 1.0
+        A[1, 2] = -1.0
         A[2, 3] = self.principal_point[1] / self.principal_point[0]
         A[2, 4] = -1.0
         A[3, 0] = H[0] * H[1]
@@ -524,13 +811,15 @@ class FramebyFrameCalib:
         # the principal point estimated by this method is very noisy, better keep it in the center of the image
         self.principal_point = (self.image_width / 2, self.image_height / 2)
         # self.principal_point = (K[0,2], K[1,2])
-        self.calibration = np.array([
-            [self.xfocal_length, 0, self.principal_point[0]],
-            [0, self.yfocal_length, self.principal_point[1]],
-            [0, 0, 1]
-        ], dtype='float')
+        self.calibration = np.array(
+            [
+                [self.xfocal_length, 0, self.principal_point[0]],
+                [0, self.yfocal_length, self.principal_point[1]],
+                [0, 0, 1],
+            ],
+            dtype="float",
+        )
         return True, K
-
 
     def from_homography(self):
         """
@@ -542,7 +831,9 @@ class FramebyFrameCalib:
         :param homography: The homography that captures the transformation between the 3D flat model of the soccer pitch
          and its image.
         """
-        success, _ = self.estimate_calibration_matrix_from_plane_homography(self.homography)
+        success, _ = self.estimate_calibration_matrix_from_plane_homography(
+            self.homography
+        )
         if not success:
             return False
 
@@ -563,9 +854,8 @@ class FramebyFrameCalib:
             R = u @ vh
         self.rotation = R
         t = hprim[:, 2] * lambda3
-        self.position = - np.transpose(R) @ t
+        self.position = -np.transpose(R) @ t
         return True
-
 
     def lines_consensus_ground(self, threshold=100):
         H = self.homography
@@ -574,17 +864,17 @@ class FramebyFrameCalib:
         self.lines_dict_cons = {}
         if plane_normal is not None:
             for key, value in self.lines_dict.items():
-                y1, y2 = value['y_1'], value['y_2']
-                x1, x2 = value['x_1'], value['x_2']
+                y1, y2 = value["y_1"], value["y_2"]
+                x1, x2 = value["x_1"], value["x_2"]
 
                 wp1, wp2 = line_world_coords_3D[key - 1]
                 p = line_plane_intersection(wp1, wp2, plane_normal, plane_point)
                 if len(p) == 2:
-                    proj1 = H @ np.array([p[0][0], p[0][1], 1.])
-                    proj2 = H @ np.array([p[1][0], p[1][1], 1.])
+                    proj1 = H @ np.array([p[0][0], p[0][1], 1.0])
+                    proj2 = H @ np.array([p[1][0], p[1][1], 1.0])
                 else:
-                    proj1 = H @ np.array([wp1[0], wp1[1], 1.])
-                    proj2 = H @ np.array([wp2[0], wp2[1], 1.])
+                    proj1 = H @ np.array([wp1[0], wp1[1], 1.0])
+                    proj2 = H @ np.array([wp2[0], wp2[1], 1.0])
 
                 proj1 /= proj1[-1]
                 proj2 /= proj2[-1]
@@ -598,57 +888,86 @@ class FramebyFrameCalib:
         H = np.append(vector, 1).reshape(3, 3)
         if not any(np.isnan(H.flatten())):
 
-            plane_normal, plane_point = plane_from_H(H, self.position, self.principal_point)
+            plane_normal, plane_point = plane_from_H(
+                H, self.position, self.principal_point
+            )
 
+            # point residuals
             points, proj_points = [], []
             for i in range(len(img_pts)):
                 # if pts[0][i] <= 57:
                 points.append(img_pts[i])
-                proj_point = H @ np.array([obj_pts[i][0], obj_pts[i][1], 1.])
+                proj_point = H @ np.array([obj_pts[i][0], obj_pts[i][1], 1.0])
                 scale = proj_point[-1]
                 proj_point /= scale
                 proj_points.append(proj_point[:2])
 
-            err1 = (np.array(points) - np.array(proj_points)).ravel()
+            residuals_pts = np.array(points) - np.array(proj_points)
+            if self.weights_pts is not None:
+                w_pts = np.asarray(self.weights_pts).astype(np.float64)
+                w_pts = np.clip(w_pts, 0.0, None)
+                sqrt_w_pts = np.sqrt(w_pts).reshape(-1, 1)
+                residuals_pts = sqrt_w_pts * residuals_pts
+            err1 = (0.01 * residuals_pts).ravel()
 
-            err2 = []
+            # line residuals
+            err2_list = []
+            line_scores = []
             for key, value in self.lines_dict_cons.items():
-                y1, y2 = value['y_1'], value['y_2']
-                x1, x2 = value['x_1'], value['x_2']
+                y1, y2 = value["y_1"], value["y_2"]
+                x1, x2 = value["x_1"], value["x_2"]
 
                 wp1, wp2 = line_world_coords_3D[key - 1]
                 p = line_plane_intersection(wp1, wp2, plane_normal, plane_point)
 
                 if len(p) == 2:
-                    proj1 = H @ np.array([p[0][0], p[0][1], 1.])
-                    proj2 = H @ np.array([p[1][0], p[1][1], 1.])
+                    proj1 = H @ np.array([p[0][0], p[0][1], 1.0])
+                    proj2 = H @ np.array([p[1][0], p[1][1], 1.0])
                 else:
-                    proj1 = H @ np.array([wp1[0], wp1[1], 1.])
-                    proj2 = H @ np.array([wp2[0], wp2[1], 1.])
+                    proj1 = H @ np.array([wp1[0], wp1[1], 1.0])
+                    proj2 = H @ np.array([wp2[0], wp2[1], 1.0])
 
                 proj1 /= proj1[-1]
                 proj2 /= proj2[-1]
                 distance1 = point_to_line_distance(proj1, proj2, np.array([x1, y1]))
                 distance2 = point_to_line_distance(proj1, proj2, np.array([x2, y2]))
-                err2.append([distance1, distance2])
+                err2_list.append([distance1, distance2])
 
-            return np.concatenate((0.01*err1, np.array(err2).ravel()))
+                s1 = value.get("p_1", value.get("p", 1.0))
+                s2 = value.get("p_2", value.get("p", 1.0))
+                line_scores.append(min(s1, s2))
+
+            if err2_list:
+                err2_arr = np.array(err2_list, dtype=np.float64)
+                weights_lines = self.score_to_weight(
+                    np.array(line_scores, dtype=np.float64)
+                )
+                weights_lines = np.clip(weights_lines, 0.0, None)
+                sqrt_wl = np.sqrt(weights_lines).reshape(-1, 1)
+                err2_arr = sqrt_wl * err2_arr
+                err2 = err2_arr.ravel()
+            else:
+                err2 = np.array([], dtype=np.float64)
+
+            return np.concatenate((err1, err2))
         else:
             err = []
-            for i in range(len(img_pts)+len( self.lines_dict_cons)):
+            for i in range(len(img_pts) + len(self.lines_dict_cons)):
                 err.append([np.inf, np.inf])
             return np.array(err).ravel()
 
-
-    def get_homography_from_ground_plane(self, use_ransac=5., inverse=False, refine_lines=False):
-        self.get_per_plane_correspondences(mode='ground_plane', use_ransac=use_ransac)
-        obj_pts, img_pts = self.get_correspondences('ground_plane')
+    def get_homography_from_ground_plane(
+        self, use_ransac=5.0, inverse=False, refine_lines=False
+    ):
+        self.get_per_plane_correspondences(mode="ground_plane", use_ransac=use_ransac)
+        obj_pts, img_pts, raw_weights = self.get_correspondences("ground_plane")
+        self.weights_pts = self.score_to_weight(raw_weights)
 
         if len(obj_pts) >= 4:
             if use_ransac > 0:
-               H, mask = cv2.findHomography(obj_pts, img_pts, cv2.RANSAC, use_ransac)
+                H, mask = cv2.findHomography(obj_pts, img_pts, cv2.RANSAC, use_ransac)
             else:
-               H, mask = cv2.findHomography(obj_pts, img_pts)
+                H, mask = cv2.findHomography(obj_pts, img_pts)
 
             if H is not None:
                 self.homography = H
@@ -658,10 +977,17 @@ class FramebyFrameCalib:
                     if refine_lines:
                         self.lines_consensus_ground()
                         vector = H.flatten()[:-1]
-                        res = least_squares(self.line_optimizer_ground, vector, verbose=0, ftol=1e-4, x_scale="jac",
-                                            method='lm', args=(img_pts, obj_pts))
-    
-                        vector_opt = res['x']
+                        res = least_squares(
+                            self.line_optimizer_ground,
+                            vector,
+                            verbose=0,
+                            ftol=1e-4,
+                            x_scale="jac",
+                            method="lm",
+                            args=(img_pts, obj_pts),
+                        )
+
+                        vector_opt = res["x"]
                         if not any(np.isnan(vector_opt)):
                             H = np.append(vector_opt, 1).reshape(3, 3)
                             self.homography = H
@@ -676,44 +1002,60 @@ class FramebyFrameCalib:
         else:
             return None, None
 
-
-    def heuristic_voting(self, refine=False, refine_lines=False, th=5.):
+    def heuristic_voting(self, refine=False, refine_lines=False, th=5.0):
         final_results = []
-        for mode in ['full', 'ground_plane', 'main']:
+        for mode in ["full", "ground_plane", "main"]:
             for use_ransac in [0, 5, 10, 15, 25, 50]:
-                cam_params, ret = self.get_cam_params(mode=mode, use_ransac=use_ransac,
-                                                      refine=refine, refine_w_lines=refine_lines)
+                cam_params, ret = self.get_cam_params(
+                    mode=mode,
+                    use_ransac=use_ransac,
+                    refine=refine,
+                    refine_w_lines=refine_lines,
+                )
                 if ret:
-                    result_dict = {'mode': mode, 'use_ransac': use_ransac, 'rep_err': ret,
-                                   'cam_params': cam_params, 'calib_plane': self.ord_pts[0]}
+                    result_dict = {
+                        "mode": mode,
+                        "use_ransac": use_ransac,
+                        "rep_err": ret,
+                        "cam_params": cam_params,
+                        "calib_plane": self.ord_pts[0],
+                    }
                     final_results.append(result_dict)
 
         if final_results:
-            final_results.sort(key=lambda x: (x['rep_err'], x['mode']))
+            final_results.sort(key=lambda x: (x["rep_err"], x["mode"]))
             for res in final_results:
-                if res['mode'] == 'full' and res['use_ransac'] == 0 and res['rep_err'] <= th:
+                if (
+                    res["mode"] == "full"
+                    and res["use_ransac"] == 0
+                    and res["rep_err"] <= th
+                ):
                     return res
             # Return the first element in the sorted list (if it's not empty)
             return final_results[0]
         else:
             return None
 
-    def heuristic_voting_ground(self, refine_lines=False, th=5.):
+    def heuristic_voting_ground(self, refine_lines=False, th=5.0):
         final_results = []
         for use_ransac in [0, 5, 10, 15, 25, 50]:
-            H, ret = self.get_homography_from_ground_plane(use_ransac=use_ransac, inverse=True, refine_lines=refine_lines)
+            H, ret = self.get_homography_from_ground_plane(
+                use_ransac=use_ransac, inverse=True, refine_lines=refine_lines
+            )
             if H is not None:
-                result_dict = {'use_ransac': use_ransac, 'rep_err': ret, 'homography': H}
+                result_dict = {
+                    "use_ransac": use_ransac,
+                    "rep_err": ret,
+                    "homography": H,
+                }
                 final_results.append(result_dict)
 
         if final_results:
-            final_results.sort(key=lambda x: (x['rep_err']))
+            final_results.sort(key=lambda x: (x["rep_err"]))
             for res in final_results:
-                if res['use_ransac'] == 0 and res['rep_err'] <= th:
+                if res["use_ransac"] == 0 and res["rep_err"] <= th:
                     return res
             # Return the first element in the sorted list (if it's not empty)
             return final_results[0]
         else:
             return None
-
-
