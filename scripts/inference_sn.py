@@ -25,7 +25,7 @@ from utils.utils_heatmap import get_keypoints_from_heatmap_batch_maxpool, get_ke
 from utils.utils_calib import FramebyFrameCalib
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
-warnings.filterwarnings("ignore", category=np.RankWarning)
+# warnings.filterwarnings("ignore", category=np.RankWarning)
 
 
 def parse_args():

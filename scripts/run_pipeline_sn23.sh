@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Set parameters
-ROOT_DIR="datasets/calibration-2023/"
+ROOT_DIR="/home/yishu/16822/soccernet-calibration-sportlight/data/dataset/"
 SPLIT="test"
 CFG="config/hrnetv2_w48.yaml"
 CFG_L="config/hrnetv2_w48_l.yaml"
 WEIGHTS_KP="weights/MV_kp"
 WEIGHTS_L="weights/MV_lines"
-SAVE_DIR="inference/inference_3D/inference_sn23/"
+SAVE_DIR="inference/inference_3D/inference_sn23_ptsonly/"
 DEVICE="cuda:0"
 KP_TH=0.0712
 LINE_TH=0.2571

@@ -212,6 +212,13 @@ class FramebyFrameCalib:
         self.weight_mode = weight_mode
         self.weight_gamma = weight_gamma
         self.weight_smin = weight_smin
+        
+        # Load score calibration
+        import pickle as pkl
+        with open('trust_model.pkl', 'rb') as f:
+            calib_models = pkl.load(f)
+        self.kp_score_model = calib_models['keypoint_model']
+        self.line_score_model = calib_models['line_model']
 
     def update(self, kp_dict, lines_dict):
         self.keypoints_dict = kp_dict
@@ -492,7 +499,15 @@ class FramebyFrameCalib:
                 if distance2 <= threshold and distance1 <= threshold:
                     self.lines_dict_cons[key] = value
 
-    def score_to_weight(self, scores):
+    def score_to_weight(self, scores, type):
+        # # print("Before: ", scores)
+        if type == "pts":
+            # apply keypoint score calibration
+            scores = self.kp_score_model.predict(np.array(scores).reshape(-1, 1)).ravel()
+        elif type == "line":
+            # apply line score calibration
+            scores = self.line_score_model.predict(np.array(scores).reshape(-1, 1)).ravel()
+        # # print("after:", scores)
         scores = np.asarray(scores, dtype=np.float64)
 
         if self.weight_mode == "uniform":
@@ -598,7 +613,7 @@ class FramebyFrameCalib:
             if err2_list:
                 err2_arr = np.array(err2_list, dtype=np.float64)
                 weights_lines = self.score_to_weight(
-                    np.array(line_scores, dtype=np.float64)
+                    np.array(line_scores, dtype=np.float64), type="line"
                 )
                 weights_lines = np.clip(weights_lines, 0.0, None)
                 sqrt_wl = np.sqrt(weights_lines).reshape(-1, 1)
@@ -685,7 +700,7 @@ class FramebyFrameCalib:
 
             # Second call: now we store point weights for LM refinement
             obj_pts, img_pts, raw_weights = self.get_correspondences(mode)
-            self.weights_pts = self.score_to_weight(raw_weights)
+            self.weights_pts = self.score_to_weight(raw_weights, type="pts")
             rep_err = self.reproj_err(obj_pts, img_pts)
 
             if refine:
@@ -940,7 +955,7 @@ class FramebyFrameCalib:
             if err2_list:
                 err2_arr = np.array(err2_list, dtype=np.float64)
                 weights_lines = self.score_to_weight(
-                    np.array(line_scores, dtype=np.float64)
+                    np.array(line_scores, dtype=np.float64), type="line"
                 )
                 weights_lines = np.clip(weights_lines, 0.0, None)
                 sqrt_wl = np.sqrt(weights_lines).reshape(-1, 1)
@@ -961,7 +976,7 @@ class FramebyFrameCalib:
     ):
         self.get_per_plane_correspondences(mode="ground_plane", use_ransac=use_ransac)
         obj_pts, img_pts, raw_weights = self.get_correspondences("ground_plane")
-        self.weights_pts = self.score_to_weight(raw_weights)
+        self.weights_pts = self.score_to_weight(raw_weights, type="pts")
 
         if len(obj_pts) >= 4:
             if use_ransac > 0:
